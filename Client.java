@@ -27,8 +27,7 @@ class IncomingMessageHandler implements Runnable {
         List<String> tokens = Utils.interpProtocol(serverRes);
         IClientAction action = client.getActions().get(tokens.get(0));
         if(action != null) action.execute(tokens);
-        if(show) Client.showMenu();
-        show = false;
+        if(show) Client.showMenu(); show = false;
       }      
     } catch (Exception e) {
       System.out.println("Connection closed: " + e.getMessage());
@@ -46,13 +45,15 @@ public class Client {
 
   private BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
 
-  private boolean mainMenu;
-  private boolean ownerMenu;
+  private String rId;
+  private boolean gameStarted;
+  private boolean turn;
 
   public Client(){
     this.registerActions();
-    this.mainMenu = true;
-    this.ownerMenu = false;
+    this.rId = "";
+    this.gameStarted = false;
+    this.turn = false;
   }
 
   public void run(){
@@ -67,14 +68,11 @@ public class Client {
       dout.writeUTF("NAME " + clientInput.trim());
       dout.flush();
 
-      while (mainMenu) {
+      
+      boolean shouldGetInput = true;
+      while (shouldGetInput) {
         clientInput = this.console.readLine();  
         handleMenuSelection(clientInput.toCharArray()[0], dout); 
-      }
-
-      while (ownerMenu) {
-        clientInput = this.console.readLine();  
-        handleOwnerMenuSelection(clientInput.toCharArray()[0], dout); 
       }
 
       din.close();
@@ -91,7 +89,7 @@ public class Client {
   }
 
   public static void showMenu(){
-    String menuOptions = "Menu:\n" +
+    String menuOptions = "\nMenu:\n" +
                          "Criar sala de jogo. (C)\n" +
                          "Listar salas de jogo. (L)\n" + 
                          "Juntar-se a uma sala de jogo. (J)\n" +
@@ -105,41 +103,94 @@ public class Client {
   }
 
   private void registerActions(){
+    this.actions.put("FULL_ROOM", (args) -> this.showError("Nao foi possivel se unir a sala pois ela ja esta cheia."));
     this.actions.put("SERVER_LOG", (args) -> this.log(args));
-    this.actions.put("SET_AS_ROOM_OWNER", (args) -> {
-      mainMenu = false;
-      ownerMenu = true;
-    });
-    this.actions.put("RESET", (args) -> {
-      mainMenu = true;
-      ownerMenu = false;
-    });
+    this.actions.put("INVALID_ROOM", (args) -> this.showError("Sala inexistente, por favor verifique o id e tente novamente.\n"));
+    this.actions.put("GAME_STARTED", (args) -> this.startGame());
+    this.actions.put("START_TURN", (args) -> this.startTurn());
+    this.actions.put("END_TURN", (args) -> this.endTurn());
+    this.actions.put("ROOM_CLOSED", (args) -> this.closeRoom());
+    this.actions.put("GAME_OVER", (args) -> this.endGame());
+  }
+
+  private synchronized void closeRoom(){
+    this.gameStarted = false;
+    this.turn = false;
+    notifyAll();
+  }
+
+  private synchronized void startGame(){
+    this.gameStarted = true;
+    notify();
+  }
+
+  private synchronized void endGame(){
+    this.gameStarted = false;
+    this.turn = false;
+    notifyAll();
+    System.out.println("Partida finalizada.");
+    showMenu();
+  }
+
+  private synchronized void endTurn(){
+    this.turn = false;
+    notifyAll();
+  }
+
+  private synchronized void startTurn(){
+    this.turn = true;
+    notifyAll();
+  }
+
+  private synchronized void waitForGameStart() throws InterruptedException{
+    while (!gameStarted) {
+      wait();
+    }
+  }
+
+  private synchronized void waitForTurn() throws InterruptedException {
+    while (!turn) {
+      wait();
+    }
+  }
+
+  private synchronized void waitForEndTurn() throws InterruptedException {
+    while (turn) {
+      wait();
+    }
   }
 
   private void log(List<String> text){
     text.remove(0);
-    System.out.print(Utils.listToString(text));
+    Utils.cls();
+    System.out.println(Utils.listToString(text));
+  }
+
+  private void showError(String errMsg){
+    System.out.print(errMsg);
   }
 
   public Map<String, IClientAction> getActions(){
     return this.actions;
   }
 
-  private void handleOwnerMenuSelection(Character selection, DataOutputStream dout) throws IOException {
+  private boolean handleOwnerMenuSelection(Character selection, DataOutputStream dout) throws IOException {
     selection = Character.toLowerCase(selection);
     switch (selection) {
       case 'i':
-        dout.writeUTF("START");
+        System.out.println("Digite a palavra de jogo:");
+        String word = this.console.readLine();
+        dout.writeUTF("START_GAME " +word);
         dout.flush();
-        break;
+        return true;
       case 'f':
         dout.writeUTF("CLOSE_ROOM");
         dout.flush();
-        break;
+        return false;
       default:
-        System.out.println("Opcao inválida. Por favor tente de novo.");
+        System.out.println("Opcao invalida. Por favor tente de novo.");
         showOwnerMenu();
-        break;
+        return true;
     }
   }
 
@@ -149,6 +200,13 @@ public class Client {
       case 'c':
         dout.writeUTF("CREATE_ROOM");
         dout.flush();
+        boolean getInput = true;
+        String input = "";
+        //showOwnerMenu();
+        while (getInput) {
+          input = this.console.readLine();
+          getInput = handleOwnerMenuSelection(input.toCharArray()[0], dout);
+        }
         break;
       case 'l':
         dout.writeUTF("LIST_ROOMS");
@@ -156,14 +214,34 @@ public class Client {
         break;
       case 'j':
         System.out.println("Digite o id da sala de jogo:");
-        String id = this.console.readLine();
-        dout.writeUTF("JOIN_ROOM " + id);
-        dout.flush();
-        break;
+        this.rId = this.console.readLine();
+        dout.writeUTF("JOIN_ROOM " + rId);
+        dout.flush(); 
+        
+        try {
+          waitForGameStart();
+          System.out.println("Partida iniciada.");
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+
+        while (this.gameStarted) {
+          try {
+            waitForTurn();
+            System.out.println("Adivinhe a letra da palavra:");
+            input = this.console.readLine();
+            dout.writeUTF("GUESS " + input);
+            dout.flush();
+            waitForEndTurn();
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
       case 's':
         dout.writeUTF("DISCONNECT");
         dout.flush();
         System.out.println("Saindo...");
+        System.exit(1);
         break;
       default:
         System.out.println("Opcao invalida. Por favor tente de novo.");

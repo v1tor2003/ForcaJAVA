@@ -62,7 +62,10 @@ class ConnectionHandler implements Runnable {
     try { this.disconnect(); } catch (IOException e) { e.printStackTrace();}
     });
     this.actions.put("CLOSE_ROOM", (handler, args) -> this.server.closeRoom(handler));
+    this.actions.put("START_GAME", (handler, args) -> this.server.startGame(handler, args.get(1)));
+    this.actions.put("GUESS", (handler, args) -> this.server.guess(handler, args.get(1)));
   }
+
 
   private void disconnect() throws IOException{
     this.connected = false;
@@ -127,16 +130,19 @@ public class Server implements Runnable{
   public synchronized void createRoom(ConnectionHandler owner){
     this.rooms.add(new Room(owner, this.id.toString()));
     owner.send(String.format("SERVER_LOG Sua sala de jogo foi criada. id[%d].\n Esperando jodadores...\n", this.id));
-    owner.send("SET_AS_ROOM_OWNER");
     System.out.println("Created room, id: " + this.id);
     System.out.println("Active rooms: " + this.rooms.size());
     this.id++;
   }
 
   public synchronized void closeRoom(ConnectionHandler owner){
+    for(Room r : this.rooms)
+      if(owner.equals(r.getOwner()))
+        r.roomBroadcast(owner, owner.getNickName() + " fechou a sala de jogo.\n");
+
     this.rooms.removeIf(room -> owner.equals(room.getOwner()));
-    owner.send(String.format("SERVER_LOG Sua sala de jogo com foi fechada.\n"));
-    owner.send("RESET");
+    owner.send(String.format("SERVER_LOG Sua sala de jogo foi fechada.\n"));
+    owner.send("CLOSED_ROOM");
     System.out.println(owner.getNickName() + " closed a room.");
     System.out.println("Active conns: " + this.connections.size());
     System.out.println("Active rooms: " + this.rooms.size());
@@ -145,15 +151,58 @@ public class Server implements Runnable{
   public synchronized void joinPlayerToRoom(ConnectionHandler requester, String rId){
     for(Room r : this.rooms){
       if(r.getId().equals(rId)) {
+        if(r.getRoomPlayersAmount() + 1 > r.getRoomCapacity()){
+          requester.send("FULL_ROOM");
+          return;
+        }
         r.addPlayer(requester);
-        requester.send("SERVER_LOG Voce se uniu a sala de " + r.getOwner().getNickName() + ".");
+        String roomInfo = String.format("Esperando jogadores... [%d, %d].\n", r.getRoomPlayersAmount(), r.getRoomCapacity());
+        
+        requester.send("ENTERED_ROOM");
+        requester.send(
+          String.format("SERVER_LOG Voce se uniu a sala de %s. %s", r.getOwner().getNickName(), roomInfo)
+        );
+
+        r.roomBroadcast(requester,
+          String.format("SERVER_LOG %s uniu-se a sala. %s\n", 
+          requester.getNickName(), roomInfo)
+        );
+
+        //r.getOwner().send("SERVER_LOG " + roomInfo +"Iniciar partida (I) | Fechar sala (F)");
+        return;
       }
+    }
+
+    requester.send("INVALID_ROOM");
+  }
+
+  public synchronized void startGame(ConnectionHandler owner, String word){
+    Room gameRoom = null;
+    for(Room r : this.rooms)
+      if(r.getOwner().equals(owner)){
+        gameRoom = r; 
+        break;
+      }
+
+    if(gameRoom != null) {
+      gameRoom.setGameWord(word);
+      gameRoom.runGame();
+      gameRoom.roomBroadcast(owner, "GAME_STARTED");
+      gameRoom.roomBroadcast(null, "SERVER_LOG " + gameRoom.roomState());
+      System.out.println("Game word set to: " + gameRoom.getGameWord());
     }
   }
 
+  public synchronized void guess(ConnectionHandler guesser, String letter){
+    for(Room r : rooms)
+      if(r.getPlayers().contains(guesser)){
+        r.guess(guesser, letter);
+        return;
+      }
+  }
   public synchronized void listRooms(ConnectionHandler requester){
     String rooms = Utils.listToString(this.rooms);
-    if(rooms.isEmpty()) rooms = "Salas ativas:\n Nao existem salas ativas no momento. Por favor tente mais tarde.";
+    if(rooms.isEmpty()) rooms = "Salas ativas:\n Nao existem salas ativas no momento. Por favor tente mais tarde.\n";
     else rooms = "Salas ativas:\n" + rooms;
     requester.send("SERVER_LOG " + rooms);
   }
