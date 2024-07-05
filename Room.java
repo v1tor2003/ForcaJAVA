@@ -62,8 +62,8 @@ public class Room {
 
     guesser.send(String.format("SERVER_LOG Voce %s a letra '%s'.\n%s.", guessResult, letter, this.roomState()));
     this.roomBroadcast(guesser, 
-        String.format("SERVER_LOG %s %s a letra '%s'.\n%s.", guesser.getNickName(), guessResult,letter, this.roomState())
-      );
+      String.format("SERVER_LOG %s %s a letra '%s'.\n%s.", guesser.getNickName(), guessResult,letter, this.roomState())
+    );
 
     guesser.send("END_TURN");
     if(maskedWord.toString().equals(word)) {
@@ -91,17 +91,18 @@ public class Room {
 
     return spacedMaskedWord.toString();
   }
-
-  public void runGame(){
-    this.gameStarted = true;
-    if(this.currTurn < this.players.size()){
-      System.out.println("Vez de: " + this.players.get(this.currTurn).getNickName());
-      this.players.get(this.currTurn).send("START_TURN");
-      this.currTurn++;
-    }
-    if(this.currTurn >= this.players.size()) this.currTurn = 0;
+  public ConnectionHandler getPlayer(int i) {return this.players.get(i);} 
   
-  }
+  public void runGame() {
+    this.gameStarted = true;
+    if(this.currTurn >= this.players.size())
+      this.currTurn = 0;
+
+    System.out.println("Vez de: " + this.players.get(this.currTurn).getNickName());
+    this.players.get(this.currTurn).send("START_TURN");
+    this.currTurn++; 
+}
+
 
   @Override
   public String toString(){

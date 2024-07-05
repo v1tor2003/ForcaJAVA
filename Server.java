@@ -159,11 +159,11 @@ public class Server implements Runnable{
         
         requester.send("ENTERED_ROOM");
         requester.send(
-          String.format("SERVER_LOG Voce se uniu a sala de %s.\n%s", r.getOwner().getNickName(), roomInfo)
+          String.format("SERVER_LOG Voce se uniu a sala de %s.\n%sArguarde o incio da partida.\n", r.getOwner().getNickName(), roomInfo)
         );
 
         r.roomBroadcast(requester,
-          String.format("SERVER_LOG %s uniu-se a sala.\n%s\n", 
+          String.format("SERVER_LOG %s uniu-se a sala.\n%s\nAguardando o inicio da partida.", 
           requester.getNickName(), roomInfo)
         );
 
@@ -186,7 +186,9 @@ public class Server implements Runnable{
       gameRoom.setGameWord(word);
       gameRoom.runGame();
       gameRoom.roomBroadcast(owner, "GAME_STARTED");
-      gameRoom.roomBroadcast(null, "SERVER_LOG " + gameRoom.roomState());
+      ConnectionHandler player = gameRoom.getPlayer(0);
+      player.send("SERVER_LOG Adivinhe uma letra:\n" + gameRoom.roomState());
+      gameRoom.roomBroadcast(player, "SERVER_LOG " + gameRoom.roomState());
       System.out.println("Palavra de jogo: " + gameRoom.getGameWord());
     }
   }

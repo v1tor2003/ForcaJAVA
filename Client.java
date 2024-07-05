@@ -29,6 +29,7 @@ class IncomingMessageHandler implements Runnable {
         if(action != null) action.execute(tokens);
         if(show) Client.showMenu(); show = false;
       }      
+      System.out.println("Servidor encerrou a conexao.");
     } catch (Exception e) {
       String msg = e.getMessage() != null ? e.getMessage() : "Client ended connection";
       System.exit(1);
@@ -112,7 +113,7 @@ public class Client {
     this.actions.put("GAME_STARTED", (args) -> this.startGame());
     this.actions.put("START_TURN", (args) -> this.startTurn());
     this.actions.put("END_TURN", (args) -> this.endTurn());
-    this.actions.put("ROOM_CLOSED", (args) -> this.closeRoom());
+    //this.actions.put("ROOM_CLOSED", (args) -> this.closeRoom());
     this.actions.put("GAME_OVER", (args) -> {
       try {
         this.endGame();
@@ -122,11 +123,11 @@ public class Client {
     });
   }
 
-  private synchronized void closeRoom(){
+  /*private synchronized void closeRoom(){
     this.gameStarted = false;
     this.turn = false;
     notifyAll();
-  }
+  }*/
 
   private synchronized void startGame(){
     this.gameStarted = true;
@@ -140,8 +141,6 @@ public class Client {
     System.out.println("Partida finalizada.");
     this.exit();
     // must close the room
-    dout.writeUTF("CLOSE_ROOM");
-    dout.flush();
   }
 
   private synchronized void exit() throws IOException{
