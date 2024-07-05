@@ -22,16 +22,17 @@ class IncomingMessageHandler implements Runnable {
   public void run (){
     try {
       boolean show = true;
-      String serverRes;
-      while ((serverRes = din.readUTF()) != null) {
+      while (!this.client.getSock().isClosed()) {
+        String serverRes = din.readUTF();
         List<String> tokens = Utils.interpProtocol(serverRes);
         IClientAction action = client.getActions().get(tokens.get(0));
         if(action != null) action.execute(tokens);
         if(show) Client.showMenu(); show = false;
       }      
     } catch (Exception e) {
-      System.out.println("Connection closed: " + e.getMessage());
-      e.printStackTrace();
+      String msg = e.getMessage() != null ? e.getMessage() : "Client ended connection";
+      System.exit(1);
+      System.out.println("Connection closed: " + msg);      
     }
   }
 }
@@ -44,22 +45,21 @@ public class Client {
   private DataOutputStream dout;
 
   private BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
-
-  private String rId;
   private boolean gameStarted;
   private boolean turn;
+  private Socket sock;
 
   public Client(){
     this.registerActions();
-    this.rId = "";
     this.gameStarted = false;
     this.turn = false;
   }
 
   public void run(){
-    try (Socket client = new Socket(hostAddr, hostPort)) {
-      din = new DataInputStream(client.getInputStream());
-      dout = new DataOutputStream(client.getOutputStream());
+    try {
+      this.sock = new Socket(hostAddr, hostPort);
+      din = new DataInputStream(this.sock.getInputStream());
+      dout = new DataOutputStream(this.sock.getOutputStream());
 
       new Thread(new IncomingMessageHandler(this.din, this)).start();
 
@@ -77,6 +77,7 @@ public class Client {
 
       din.close();
       dout.close();
+      this.sock.close();
     } catch (UnknownHostException e) {
       System.out.println("Server not found: " + e.getMessage());
     } catch (IOException e) {
@@ -102,6 +103,8 @@ public class Client {
     System.out.println("Iniciar Partida (I) | Fechar Sala (F).");  
   }
 
+  public Socket getSock(){ return this.sock; }
+
   private void registerActions(){
     this.actions.put("FULL_ROOM", (args) -> this.showError("Nao foi possivel se unir a sala pois ela ja esta cheia."));
     this.actions.put("SERVER_LOG", (args) -> this.log(args));
@@ -110,7 +113,13 @@ public class Client {
     this.actions.put("START_TURN", (args) -> this.startTurn());
     this.actions.put("END_TURN", (args) -> this.endTurn());
     this.actions.put("ROOM_CLOSED", (args) -> this.closeRoom());
-    this.actions.put("GAME_OVER", (args) -> this.endGame());
+    this.actions.put("GAME_OVER", (args) -> {
+      try {
+        this.endGame();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    });
   }
 
   private synchronized void closeRoom(){
@@ -124,12 +133,21 @@ public class Client {
     notify();
   }
 
-  private synchronized void endGame(){
+  private synchronized void endGame() throws IOException{
     this.gameStarted = false;
     this.turn = false;
     notifyAll();
     System.out.println("Partida finalizada.");
-    showMenu();
+    this.exit();
+    // must close the room
+    dout.writeUTF("CLOSE_ROOM");
+    dout.flush();
+  }
+
+  private synchronized void exit() throws IOException{
+    System.out.println("Saindo...");
+    dout.writeUTF("DISCONNECT");
+    dout.flush();
   }
 
   private synchronized void endTurn(){
@@ -214,8 +232,8 @@ public class Client {
         break;
       case 'j':
         System.out.println("Digite o id da sala de jogo:");
-        this.rId = this.console.readLine();
-        dout.writeUTF("JOIN_ROOM " + rId);
+        String id = this.console.readLine();
+        dout.writeUTF("JOIN_ROOM " + id);
         dout.flush(); 
         
         try {
@@ -224,7 +242,7 @@ public class Client {
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
-
+      
         while (this.gameStarted) {
           try {
             waitForTurn();
@@ -237,11 +255,10 @@ public class Client {
             e.printStackTrace();
           }
         }
+
+        break;
       case 's':
-        dout.writeUTF("DISCONNECT");
-        dout.flush();
-        System.out.println("Saindo...");
-        System.exit(1);
+        this.exit();
         break;
       default:
         System.out.println("Opcao invalida. Por favor tente de novo.");

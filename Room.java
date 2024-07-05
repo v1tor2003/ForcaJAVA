@@ -60,7 +60,7 @@ public class Room {
       guessResult = "errou";
     }
 
-    guesser.send(String.format("SERVER_LOG Voce %s a letra %s.\n%s.", guessResult, letter, this.roomState()));
+    guesser.send(String.format("SERVER_LOG Voce %s a letra '%s'.\n%s.", guessResult, letter, this.roomState()));
     this.roomBroadcast(guesser, 
         String.format("SERVER_LOG %s %s a letra '%s'.\n%s.", guesser.getNickName(), guessResult,letter, this.roomState())
       );
@@ -82,7 +82,14 @@ public class Room {
   }
 
   private String getMaskedWord(){
-    return this.maskedWord.toString();
+    StringBuilder spacedMaskedWord = new StringBuilder();
+    for (int i = 0; i < this.maskedWord.length(); i++) {
+      spacedMaskedWord.append(this.maskedWord.charAt(i));
+      if (i < this.maskedWord.length() - 1) 
+        spacedMaskedWord.append(' ');
+    }
+
+    return spacedMaskedWord.toString();
   }
 
   public void runGame(){

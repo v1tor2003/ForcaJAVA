@@ -41,7 +41,6 @@ class ConnectionHandler implements Runnable {
         System.out.println("Server exception on closing conn: " + e.getMessage());
         e.printStackTrace();
       }
-      server.removeConnection(this);
     }
   }
 
@@ -113,13 +112,13 @@ public class Server implements Runnable{
   public void run() {
     try (ServerSocket ss = new ServerSocket(port)) {
       pool = Executors.newCachedThreadPool();
-      System.out.println("Server up and running on port: " + port);
+      System.out.println("Server rodando na porta: " + port);
       while (!shut) {
         Socket client = ss.accept();
         ConnectionHandler handler = new ConnectionHandler(client, this);
         connections.add(handler);
         pool.execute(handler);
-        System.out.println("Active conns: " + connections.size());
+        System.out.println("Nova conexao.\nConexoes ativas: " + connections.size());
       }
     } catch (IOException e) {
       System.out.println("Server exception: " + e.getMessage());
@@ -129,9 +128,9 @@ public class Server implements Runnable{
 
   public synchronized void createRoom(ConnectionHandler owner){
     this.rooms.add(new Room(owner, this.id.toString()));
-    owner.send(String.format("SERVER_LOG Sua sala de jogo foi criada. id[%d].\n Esperando jodadores...\n", this.id));
-    System.out.println("Created room, id: " + this.id);
-    System.out.println("Active rooms: " + this.rooms.size());
+    owner.send(String.format("SERVER_LOG Sua sala de jogo foi criada. id[%d].\nEsperando jodadores...\nIniciar partida (I) | Fechar sala (F).", this.id));
+    System.out.println("Sala criada, id: " + this.id);
+    System.out.println("Salas ativas: " + this.rooms.size());
     this.id++;
   }
 
@@ -142,10 +141,10 @@ public class Server implements Runnable{
 
     this.rooms.removeIf(room -> owner.equals(room.getOwner()));
     owner.send(String.format("SERVER_LOG Sua sala de jogo foi fechada.\n"));
-    owner.send("CLOSED_ROOM");
-    System.out.println(owner.getNickName() + " closed a room.");
-    System.out.println("Active conns: " + this.connections.size());
-    System.out.println("Active rooms: " + this.rooms.size());
+    owner.send("ROOM_CLOSED");
+    System.out.println(owner.getNickName() + " fechou sua sala.");
+    System.out.println("Conexoes ativas: " + this.connections.size());
+    System.out.println("Salas ativas: " + this.rooms.size());
   }
 
   public synchronized void joinPlayerToRoom(ConnectionHandler requester, String rId){
@@ -160,15 +159,14 @@ public class Server implements Runnable{
         
         requester.send("ENTERED_ROOM");
         requester.send(
-          String.format("SERVER_LOG Voce se uniu a sala de %s. %s", r.getOwner().getNickName(), roomInfo)
+          String.format("SERVER_LOG Voce se uniu a sala de %s.\n%s", r.getOwner().getNickName(), roomInfo)
         );
 
         r.roomBroadcast(requester,
-          String.format("SERVER_LOG %s uniu-se a sala. %s\n", 
+          String.format("SERVER_LOG %s uniu-se a sala.\n%s\n", 
           requester.getNickName(), roomInfo)
         );
 
-        //r.getOwner().send("SERVER_LOG " + roomInfo +"Iniciar partida (I) | Fechar sala (F)");
         return;
       }
     }
@@ -189,7 +187,7 @@ public class Server implements Runnable{
       gameRoom.runGame();
       gameRoom.roomBroadcast(owner, "GAME_STARTED");
       gameRoom.roomBroadcast(null, "SERVER_LOG " + gameRoom.roomState());
-      System.out.println("Game word set to: " + gameRoom.getGameWord());
+      System.out.println("Palavra de jogo: " + gameRoom.getGameWord());
     }
   }
 
@@ -202,7 +200,7 @@ public class Server implements Runnable{
   }
   public synchronized void listRooms(ConnectionHandler requester){
     String rooms = Utils.listToString(this.rooms);
-    if(rooms.isEmpty()) rooms = "Salas ativas:\n Nao existem salas ativas no momento. Por favor tente mais tarde.\n";
+    if(rooms.isEmpty()) rooms = "Salas ativas:\nNao existem salas ativas no momento. Por favor tente mais tarde.\n";
     else rooms = "Salas ativas:\n" + rooms;
     requester.send("SERVER_LOG " + rooms);
   }
@@ -213,7 +211,7 @@ public class Server implements Runnable{
 
   public synchronized void removeConnection(ConnectionHandler conn){
     connections.remove(conn);
-    System.out.println("Conn removed. Active conns: " + connections.size());
+    System.out.println("Disconexao percebida. Conexoes ativas: " + connections.size());
   }
 
   public static void main(String... args) {
