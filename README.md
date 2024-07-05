@@ -1,5 +1,7 @@
 ﻿Requisitos Mínimos e Instruções de Execução
+
 Grupo: Vitor Pires, Gustavo Aragão, Pedro Affonso, Luiz Rosário.
+
 Este documento fornece informações sobre os requisitos mínimos e as instruções necessárias para compilar e executar a aplicação cliente-servidor de um jogo de Forca Multijogador em Java.
 
 Requisitos Mínimos
